@@ -21,7 +21,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 # OpenRouter
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_LLM_MODEL = "deepseek/deepseek-v4-flash:free"
+DEFAULT_LLM_MODEL = "openai/gpt-oss-120b:free"
 
 # RAG
 CHUNK_SIZE = 800           # characters per chunk

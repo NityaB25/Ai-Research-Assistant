@@ -8,6 +8,7 @@ from auth import get_current_user
 from services.pdf_service import process_pdf
 from services.vector_service import build_index
 from config import UPLOAD_DIR
+from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -129,6 +130,44 @@ def document_status(
         "chunk_count": doc.chunk_count,
         "error_msg": doc.error_msg,
     }
+
+from jose import JWTError, jwt
+from config import SECRET_KEY, ALGORITHM
+
+@router.get("/{doc_id}/file")
+def get_document_file(
+    doc_id: int,
+    token: str,
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload.get("sub"))
+    except (JWTError, TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    doc = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.owner_id == user_id,
+    ).first()
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    path = Path(doc.file_path)
+
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="PDF file missing")
+
+    response = FileResponse(
+    path=str(path),
+    media_type="application/pdf",
+)
+
+    response.headers["Content-Disposition"] = "inline"
+
+    return response 
+
 
 
 @router.delete("/{doc_id}", status_code=204)

@@ -91,7 +91,15 @@ async def generate_answer(
             headers=headers,
             json=payload,
         )
-        response.raise_for_status()
+        try:
+             response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            print("OPENROUTER ERROR:", e.response.text)
+
+            if e.response.status_code == 429:
+                return "OpenRouter free-tier rate limit reached. Please wait a minute and try again."
+
+            return f"LLM API error: {e.response.status_code}"
         data = response.json()
         print(data)
 
