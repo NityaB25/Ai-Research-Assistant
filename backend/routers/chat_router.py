@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from database import get_db, Document, ChatSession, ChatMessage, User
 from auth import get_current_user
 from services.vector_service import retrieve
-from services.llm_service import generate_answer, extract_citations
+from services.llm_service import generate_answer, extract_citations, summarize_conversation
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -123,10 +123,32 @@ async def ask(
         .order_by(ChatMessage.created_at)
         .all()
     )
+
     history = [{"role": m.role, "content": m.content} for m in history_msgs]
 
+    # Rolling summarization after long conversations
+    if len(history) > 12:
+        old_messages = history[:-6]
+
+        updated_summary = await summarize_conversation(
+            old_messages,
+            session.summary or "",
+        )
+
+        session.summary = updated_summary
+
+        db.commit()
+
+        # Keep only recent messages active
+        history = history[-6:]
+
     # 3. Generate answer via LLM
-    answer = await generate_answer(req.question, retrieved, history)
+    answer = await generate_answer(
+        req.question,
+        retrieved,
+        history,
+        session.summary
+    )
 
     # 4. Extract citations
     citations = extract_citations(retrieved)

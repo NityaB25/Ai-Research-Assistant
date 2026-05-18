@@ -47,6 +47,7 @@ class ChatSession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     owner_id = Column(Integer, ForeignKey("users.id"))
     document_id = Column(Integer, ForeignKey("documents.id"))
+    summary = Column(Text, nullable=True)
 
     owner = relationship("User", back_populates="chat_sessions")
     document = relationship("Document", back_populates="chat_sessions")
