@@ -1,0 +1,114 @@
+"""
+LLM Service
+- Sends retrieved chunks as context to OpenRouter (meta-llama/llama-3.3-8b-instruct:free)
+- Returns streamed or full response with page citations
+"""
+import json
+import httpx
+from typing import List, Dict, Any
+from config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL, DEFAULT_LLM_MODEL
+
+SYSTEM_PROMPT = """You are an expert AI Research Assistant. Your job is to help users understand research papers and documents.
+
+Rules:
+1. Answer ONLY based on the provided context chunks from the document.
+2. If the context does not contain enough information, say so clearly.
+3. Always cite the page numbers when referencing information (e.g. "According to page 3...").
+4. Be concise, accurate, and helpful.
+5. Use markdown formatting for clarity (bullet points, bold, code blocks if needed).
+6. When summarizing, cover the key points thoroughly.
+"""
+
+
+def build_context_block(retrieved_chunks: List[Dict[str, Any]]) -> str:
+    """Format retrieved chunks into a readable context string for the LLM."""
+    blocks = []
+    for chunk in retrieved_chunks:
+        blocks.append(
+            f"[Page {chunk['page']} | Score: {chunk['score']:.2f}]\n{chunk['text']}"
+        )
+    return "\n\n---\n\n".join(blocks)
+
+
+def build_messages(
+    query: str,
+    retrieved_chunks: List[Dict[str, Any]],
+    history: List[Dict[str, str]] | None = None,
+) -> List[Dict[str, str]]:
+    """Build the messages array for the chat completion API."""
+    context = build_context_block(retrieved_chunks)
+
+    user_message = f"""Here are the most relevant excerpts from the document:
+
+{context}
+
+---
+
+User Question: {query}
+
+Please answer based on the excerpts above. Cite page numbers where relevant."""
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    # Add conversation history (last 6 turns to stay within context)
+    if history:
+        for msg in history[-6:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+
+    messages.append({"role": "user", "content": user_message})
+    return messages
+
+
+async def generate_answer(
+    query: str,
+    retrieved_chunks: List[Dict[str, Any]],
+    history: List[Dict[str, str]] | None = None,
+    model: str = DEFAULT_LLM_MODEL,
+) -> str:
+    """Call OpenRouter and return the full answer text."""
+    if not OPENROUTER_API_KEY:
+        raise ValueError("OPENROUTER_API_KEY is not set. Add it to your .env file.")
+
+    messages = build_messages(query, retrieved_chunks, history)
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:5173",   # Required by OpenRouter
+        "X-Title": "AI Research Assistant",
+    }
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.3,       # Lower = more factual
+        "max_tokens": 1024,
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            f"{OPENROUTER_BASE_URL}/chat/completions",
+            headers=headers,
+            json=payload,
+        )
+        response.raise_for_status()
+        data = response.json()
+        print(data)
+
+    return data["choices"][0]["message"]["content"].strip()
+
+
+def extract_citations(retrieved_chunks: List[Dict[str, Any]]) -> List[Dict]:
+    """Build a clean list of citations to attach to the message."""
+    seen_pages = set()
+    citations = []
+    for chunk in retrieved_chunks:
+        page = chunk["page"]
+        if page not in seen_pages:
+            seen_pages.add(page)
+            citations.append({
+                "page": page,
+                "snippet": chunk["text"][:200] + "..." if len(chunk["text"]) > 200 else chunk["text"],
+                "score": round(chunk["score"], 3),
+            })
+    return citations

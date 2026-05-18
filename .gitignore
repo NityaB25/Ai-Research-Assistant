@@ -1,0 +1,25 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+.env.example
+
+# Node
+node_modules/
+dist/
+
+# Database
+*.db
+*.sqlite3
+
+# Uploads
+uploads/
+
+# OS
+.DS_Store
+Thumbs.db
+
+vectors/
