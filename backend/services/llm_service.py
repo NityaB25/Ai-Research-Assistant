@@ -197,6 +197,147 @@ Create an updated rolling summary.
     return data["choices"][0]["message"]["content"].strip()
 
 
+async def should_rewrite_query(
+    query: str,
+    history: List[Dict[str, str]],
+    summary: str | None = None,
+) -> bool:
+    """
+    Determine whether the query depends on previous conversation context.
+    """
+
+    if not history and not summary:
+        return False
+
+    recent_history = "\n".join(
+        [f"{m['role']}: {m['content']}" for m in history[-6:]]
+    )
+
+    prompt = f"""
+Determine whether the user's latest query depends on previous conversation context.
+
+Respond ONLY with:
+YES
+or
+NO
+
+Conversation Summary:
+{summary or "None"}
+
+Recent Conversation:
+{recent_history}
+
+Latest Query:
+{query}
+"""
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:5173",
+        "X-Title": "AI Research Assistant",
+    }
+
+    payload = {
+        "model": DEFAULT_LLM_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a query dependency classifier."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0,
+        "max_tokens": 5,
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"{OPENROUTER_BASE_URL}/chat/completions",
+            headers=headers,
+            json=payload,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+    result = data["choices"][0]["message"]["content"].strip().upper()
+
+    return result == "YES"
+
+
+async def rewrite_query(
+    query: str,
+    history: List[Dict[str, str]],
+    summary: str | None = None,
+) -> str:
+    """
+    Rewrite context-dependent queries into standalone queries.
+    """
+
+    recent_history = "\n".join(
+        [f"{m['role']}: {m['content']}" for m in history[-6:]]
+    )
+
+    prompt = f"""
+Rewrite the user's latest query into a standalone query.
+
+Rules:
+- Preserve the original meaning
+- Do not add extra information
+- Keep it concise
+- Return ONLY the rewritten query
+
+Conversation Summary:
+{summary or "None"}
+
+Recent Conversation:
+{recent_history}
+
+Latest Query:
+{query}
+"""
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:5173",
+        "X-Title": "AI Research Assistant",
+    }
+
+    payload = {
+        "model": DEFAULT_LLM_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a query rewriting assistant."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.1,
+        "max_tokens": 128,
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"{OPENROUTER_BASE_URL}/chat/completions",
+            headers=headers,
+            json=payload,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+    return data["choices"][0]["message"]["content"].strip()
+
 def extract_citations(retrieved_chunks: List[Dict[str, Any]]) -> List[Dict]:
     """Build a clean list of citations to attach to the message."""
     seen_pages = set()

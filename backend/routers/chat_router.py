@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from database import get_db, Document, ChatSession, ChatMessage, User
 from auth import get_current_user
 from services.vector_service import retrieve
-from services.llm_service import generate_answer, extract_citations, summarize_conversation
+from services.llm_service import generate_answer, extract_citations, summarize_conversation,should_rewrite_query,rewrite_query
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -108,15 +108,11 @@ async def ask(
 
     if not doc or doc.status != "ready":
         raise HTTPException(status_code=400, detail="Document not ready")
+
     if not doc.vector_path:
         raise HTTPException(status_code=400, detail="Vector index not found")
 
-    # 1. Retrieve relevant chunks via FAISS
-    retrieved = retrieve(req.question, doc.vector_path, top_k=req.top_k)
-    if not retrieved:
-        raise HTTPException(status_code=500, detail="No relevant chunks found")
-
-    # 2. Build conversation history for context
+    # 1. Build conversation history
     history_msgs = (
         db.query(ChatMessage)
         .filter(ChatMessage.session_id == session_id)
@@ -124,9 +120,12 @@ async def ask(
         .all()
     )
 
-    history = [{"role": m.role, "content": m.content} for m in history_msgs]
+    history = [
+        {"role": m.role, "content": m.content}
+        for m in history_msgs
+    ]
 
-    # Rolling summarization after long conversations
+    # 2. Rolling summarization after long conversations
     if len(history) > 12:
         old_messages = history[:-6]
 
@@ -136,24 +135,52 @@ async def ask(
         )
 
         session.summary = updated_summary
-
         db.commit()
 
         # Keep only recent messages active
         history = history[-6:]
 
-    # 3. Generate answer via LLM
+    # 3. Decide whether query rewrite is needed
+    final_query = req.question
+
+    rewrite_needed = await should_rewrite_query(
+        req.question,
+        history,
+        session.summary,
+    )
+
+    if rewrite_needed:
+        final_query = await rewrite_query(
+            req.question,
+            history,
+            session.summary,
+        )
+
+    print("Original Query:", req.question)
+    print("Final Query:", final_query)
+
+    # 4. Retrieve relevant chunks via FAISS
+    retrieved = retrieve(
+        final_query,
+        doc.vector_path,
+        top_k=req.top_k,
+    )
+
+    if not retrieved:
+        raise HTTPException(status_code=500, detail="No relevant chunks found")
+
+    # 5. Generate answer via LLM
     answer = await generate_answer(
         req.question,
         retrieved,
         history,
-        session.summary
+        session.summary,
     )
 
-    # 4. Extract citations
+    # 6. Extract citations
     citations = extract_citations(retrieved)
 
-    # 5. Save user message
+    # 7. Save user message
     user_msg = ChatMessage(
         role="user",
         content=req.question,
@@ -161,14 +188,16 @@ async def ask(
     )
     db.add(user_msg)
 
-    # 6. Save assistant message
+    # 8. Save assistant message
     assistant_msg = ChatMessage(
         role="assistant",
         content=answer,
         sources=json.dumps(citations),
         session_id=session_id,
     )
+
     db.add(assistant_msg)
+
     db.commit()
     db.refresh(assistant_msg)
 
@@ -176,7 +205,11 @@ async def ask(
         "answer": answer,
         "citations": citations,
         "retrieved_chunks": [
-            {"page": c["page"], "score": c["score"], "snippet": c["text"][:300]}
+            {
+                "page": c["page"],
+                "score": c["score"],
+                "snippet": c["text"][:300],
+            }
             for c in retrieved
         ],
         "message_id": assistant_msg.id,
