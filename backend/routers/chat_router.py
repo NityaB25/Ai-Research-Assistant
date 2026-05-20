@@ -1,11 +1,20 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db, Document, ChatSession, ChatMessage, User
 from auth import get_current_user
 from services.vector_service import retrieve
-from services.llm_service import generate_answer, extract_citations, summarize_conversation,should_rewrite_query,rewrite_query
+from services.llm_service import (
+    generate_answer,
+    stream_answer,
+    extract_citations,
+    summarize_conversation,
+    should_rewrite_query,
+    rewrite_query,
+)
+
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -156,8 +165,8 @@ async def ask(
             session.summary,
         )
 
-    print("Original Query:", req.question)
-    print("Final Query:", final_query)
+    # print("Original Query:", req.question)
+    # print("Final Query:", final_query)
 
     # 4. Retrieve relevant chunks via FAISS
     retrieved = retrieve(
@@ -214,6 +223,105 @@ async def ask(
         ],
         "message_id": assistant_msg.id,
     }
+@router.post("/sessions/{session_id}/ask-stream")
+async def ask_stream(
+    session_id: int,
+    req: AskRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+
+    session = _get_session_or_404(
+        session_id,
+        current_user.id,
+        db,
+    )
+
+    doc = db.query(Document).filter(
+        Document.id == session.document_id
+    ).first()
+
+    if not doc or doc.status != "ready":
+        raise HTTPException(
+            status_code=400,
+            detail="Document not ready",
+        )
+
+    history_msgs = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at)
+        .all()
+    )
+
+    history = [
+        {"role": m.role, "content": m.content}
+        for m in history_msgs
+    ]
+
+    final_query = req.question
+
+    rewrite_needed = await should_rewrite_query(
+        req.question,
+        history,
+        session.summary,
+    )
+
+    if rewrite_needed:
+        final_query = await rewrite_query(
+            req.question,
+            history,
+            session.summary,
+        )
+
+    retrieved = retrieve(
+        final_query,
+        doc.vector_path,
+        top_k=req.top_k,
+    )
+
+    citations = extract_citations(retrieved)
+
+    async def event_generator():
+
+        full_answer = ""
+
+        async for token in stream_answer(
+            req.question,
+            retrieved,
+            history,
+            session.summary,
+        ):
+
+            full_answer += token
+
+            yield token
+        yield f"\n__SOURCES__{json.dumps(citations)}"
+        # Save messages AFTER streaming completes
+
+        user_msg = ChatMessage(
+            role="user",
+            content=req.question,
+            session_id=session_id,
+        )
+
+        db.add(user_msg)
+
+        assistant_msg = ChatMessage(
+            role="assistant",
+            content=full_answer,
+            sources=json.dumps(citations),
+            session_id=session_id,
+        )
+
+        db.add(assistant_msg)
+
+        db.commit()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/plain",
+    )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

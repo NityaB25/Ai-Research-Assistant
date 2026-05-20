@@ -56,6 +56,68 @@ export const chatAPI = {
   deleteSession: (id) => api.delete(`/chat/sessions/${id}`),
   ask: (sessionId, question, topK = 5) =>
     api.post(`/chat/sessions/${sessionId}/ask`, { question, top_k: topK }),
+
+
+
+  askStream: async (sessionId, question, onChunk) => {
+  const token = localStorage.getItem("token");
+
+  const response = await fetch(
+    `/api/chat/sessions/${sessionId}/ask-stream`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        question,
+        top_k: 5,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Streaming request failed");
+  }
+
+  const reader = response.body.getReader();
+
+  const decoder = new TextDecoder();
+
+  let fullText = "";
+
+  while (true) {
+
+  const { done, value } = await reader.read();
+
+  if (done) break;
+
+  const chunk = decoder.decode(value);
+
+  fullText += chunk;
+
+  const sourceMarker = "__SOURCES__";
+
+  if (fullText.includes(sourceMarker)) {
+
+    const parts = fullText.split(sourceMarker);
+
+    const cleanText = parts[0];
+
+    const citations = JSON.parse(parts[1]);
+
+    onChunk(cleanText, citations);
+
+  } else {
+
+    onChunk(fullText, []);
+
+  }
+}
+
+  return fullText;
+},
 };
 
 export default api;

@@ -1,4 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+} from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -46,8 +50,10 @@ export default function ChatPage() {
   const [expandedCitations, setExpandedCitations] =
     useState({});
   const [numPages, setNumPages] = useState(null);
+  const [activePage, setActivePage] = useState(null);
 
   const bottomRef = useRef();
+  const pageRefs = useRef({});
   const textareaRef = useRef();
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -79,55 +85,82 @@ export default function ChatPage() {
 
   // ────────────────────────────────────────────────────────────────────────────
 
-  const handleSend = async () => {
-    const q = input.trim();
+ const handleSend = async () => {
+  const q = input.trim();
 
-    if (!q || asking) return;
+  if (!q || asking) return;
 
-    setInput("");
-    setError("");
-    setAsking(true);
+  setInput("");
+  setError("");
+  setAsking(true);
 
-    const optimisticUser = {
-      id: Date.now(),
-      role: "user",
-      content: q,
-      sources: [],
-    };
-
-    setMessages((prev) => [...prev, optimisticUser]);
-
-    try {
-      const res = await chatAPI.ask(sessionId, q);
-
-      const { answer, citations } = res.data;
-
-      const assistantMsg = {
-        id: Date.now() + 1,
-        role: "assistant",
-        content: answer,
-        sources: citations,
-      };
-
-      setMessages((prev) => [
-        ...prev,
-        assistantMsg,
-      ]);
-    } catch (err) {
-      setError(
-        err.response?.data?.detail ||
-          "Failed to get answer"
-      );
-
-      setMessages((prev) =>
-        prev.filter((m) => m.id !== optimisticUser.id)
-      );
-    } finally {
-      setAsking(false);
-      textareaRef.current?.focus();
-    }
+  const optimisticUser = {
+    id: Date.now(),
+    role: "user",
+    content: q,
+    sources: [],
   };
 
+  setMessages((prev) => [...prev, optimisticUser]);
+
+  // Placeholder assistant message
+  const assistantId = Date.now() + 1;
+
+  const streamingAssistant = {
+    id: assistantId,
+    role: "assistant",
+    content: "",
+    sources: [],
+  };
+
+  setMessages((prev) => [
+    ...prev,
+    streamingAssistant,
+  ]);
+
+  try {
+
+    await chatAPI.askStream(
+      sessionId,
+      q,
+      (partialText,citations) => {
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? {
+                  ...msg,
+                  content: partialText,
+                  sources: citations || [],
+                }
+              : msg
+          )
+        );
+
+      }
+    );
+
+  } catch (err) {
+
+    setError(
+      err.message || "Failed to stream answer"
+    );
+
+    setMessages((prev) =>
+      prev.filter(
+        (m) =>
+          m.id !== optimisticUser.id &&
+          m.id !== assistantId
+      )
+    );
+
+  } finally {
+
+    setAsking(false);
+
+    textareaRef.current?.focus();
+  }
+};
   // ────────────────────────────────────────────────────────────────────────────
 
   const handleKey = (e) => {
@@ -143,6 +176,21 @@ export default function ChatPage() {
       [id]: !prev[id],
     }));
   };
+
+  const scrollToPage = (pageNumber) => {
+
+  setActivePage(pageNumber);
+
+  const element = pageRefs.current[pageNumber];
+
+  if (element) {
+    element.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
+};
 
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -162,6 +210,47 @@ const token = localStorage.getItem("token");
 const pdfUrl = session
   ? `/api/documents/${session.document_id}/file?token=${token}`
   : null;
+
+
+const renderContentWithCitations = (text) => {
+
+  const parts = text.split(
+    /(\[Page\s+\d+\])/g
+  );
+
+  return parts.map((part, idx) => {
+
+    const match = part.match(
+      /\[Page\s+(\d+)\]/
+    );
+
+    if (match) {
+
+      const pageNumber = Number(match[1]);
+
+      return (
+        <button
+          key={idx}
+          onClick={() =>
+            scrollToPage(pageNumber)
+          }
+          className="mx-1 text-accent-400 hover:text-accent-300 underline underline-offset-2 transition-colors"
+        >
+          {part}
+        </button>
+      );
+    }
+
+    return (
+      <ReactMarkdown
+        key={idx}
+        remarkPlugins={[remarkGfm]}
+      >
+        {part}
+      </ReactMarkdown>
+    );
+  });
+};
 
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -238,10 +327,17 @@ const pdfUrl = session
     Array.from(
       { length: numPages },
       (_, index) => (
-        <div
-          key={`page_${index + 1}`}
-          className="mb-4 shadow-2xl"
-        >
+          <div
+  key={`page_${index + 1}`}
+  ref={(el) =>
+    (pageRefs.current[index + 1] = el)
+  }
+  className={`mb-4 shadow-2xl border-2 rounded-lg transition-all ${
+    activePage === index + 1
+      ? "border-accent-400 shadow-accent-500/30"
+      : "border-transparent"
+  }`}
+>
           <Page
             pageNumber={index + 1}
             width={550}
@@ -335,11 +431,9 @@ const pdfUrl = session
                         <p>{msg.content}</p>
                       ) : (
                         <div className="prose-chat">
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
+                         {renderContentWithCitations(
+  msg.content
+)}
                         </div>
                       )}
                     </div>
@@ -381,7 +475,8 @@ const pdfUrl = session
                                 (src, i) => (
                                   <div
                                     key={i}
-                                    className="bg-ink-900 border border-ink-700 rounded-xl p-3"
+                                    onClick={() => scrollToPage(src.page)}
+                                    className="bg-ink-900 border border-ink-700 rounded-xl p-3 cursor-pointer hover:border-accent-500/40 hover:bg-ink-800 transition-all"
                                   >
                                     <div className="flex items-center gap-2 mb-1.5">
                                       <span className="text-xs font-medium text-accent-400 bg-accent-500/10 border border-accent-500/20 px-2 py-0.5 rounded-full">
@@ -404,7 +499,7 @@ const pdfUrl = session
               ))}
 
               {/* Thinking */}
-              {asking && (
+              {asking && messages[messages.length - 1]?.role !== "assistant" && (
                 <div className="flex gap-3">
                   <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent-500 to-accent-700 flex items-center justify-center">
                     <Sparkles className="w-4 h-4 text-white" />

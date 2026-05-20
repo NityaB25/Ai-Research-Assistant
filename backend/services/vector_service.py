@@ -154,8 +154,6 @@ def retrieve(
     # Keep best reranked chunks
     final_results = candidates[:top_k]
 
-    print("RERANK SCORES:")
-    for c in final_results:
-        print(c["rerank_score"], c["text"][:80])
+    
 
     return final_results

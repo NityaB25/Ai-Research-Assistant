@@ -7,6 +7,7 @@ import json
 import httpx
 from typing import List, Dict, Any
 from config import OPENROUTER_API_KEY, OPENROUTER_BASE_URL, DEFAULT_LLM_MODEL
+from typing import AsyncGenerator
 
 SYSTEM_PROMPT = """You are an expert AI Research Assistant. Your job is to help users understand research papers and documents.
 
@@ -140,9 +141,80 @@ async def generate_answer(
 
             return f"LLM API error: {e.response.status_code}"
         data = response.json()
-        print(data)
+      
 
     return data["choices"][0]["message"]["content"].strip()
+
+async def stream_answer(
+    query: str,
+    retrieved_chunks: List[Dict[str, Any]],
+    history: List[Dict[str, str]] | None = None,
+    summary: str | None = None,
+    model: str = DEFAULT_LLM_MODEL,
+) -> AsyncGenerator[str, None]:
+
+    if not OPENROUTER_API_KEY:
+        raise ValueError("OPENROUTER_API_KEY is not set.")
+
+    messages = build_messages(
+        query,
+        retrieved_chunks,
+        history,
+        summary,
+    )
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:5173",
+        "X-Title": "AI Research Assistant",
+    }
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 1024,
+        "stream": True,
+    }
+
+    async with httpx.AsyncClient(timeout=None) as client:
+
+        async with client.stream(
+            "POST",
+            f"{OPENROUTER_BASE_URL}/chat/completions",
+            headers=headers,
+            json=payload,
+        ) as response:
+
+            response.raise_for_status()
+
+            async for line in response.aiter_lines():
+
+                if not line:
+                    continue
+
+                if line.startswith("data: "):
+
+                    data_str = line[len("data: "):]
+
+                    if data_str == "[DONE]":
+                        break
+
+                    try:
+                        data = json.loads(data_str)
+
+                        delta = (
+                            data["choices"][0]
+                            .get("delta", {})
+                            .get("content", "")
+                        )
+
+                        if delta:
+                            yield delta
+
+                    except Exception:
+                        continue
 
 async def summarize_conversation(
     messages: List[Dict[str, str]],
