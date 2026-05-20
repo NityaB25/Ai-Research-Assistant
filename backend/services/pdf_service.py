@@ -6,7 +6,8 @@ PDF Processing Service
 """
 import fitz  # PyMuPDF
 from typing import List, Dict, Any
-from config import CHUNK_SIZE, CHUNK_OVERLAP
+from config import CHUNK_SIZE, CHUNK_OVERLAP,MIN_CHUNK_SIZE
+import re
 
 
 def extract_pages(file_path: str) -> List[Dict[str, Any]]:
@@ -25,39 +26,96 @@ def extract_pages(file_path: str) -> List[Dict[str, Any]]:
     return pages
 
 
+def split_into_sentences(text: str) -> List[str]:
+    """
+    Lightweight sentence splitter.
+    """
+
+    text = re.sub(r"\s+", " ", text).strip()
+
+    sentences = re.split(
+        r'(?<=[.!?])\s+(?=[A-Z])',
+        text
+    )
+
+    return [s.strip() for s in sentences if s.strip()]
+
+
 def chunk_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Split page texts into overlapping chunks.
-    Each chunk carries:
-        - chunk_id  : sequential id
-        - page      : source page number
-        - text      : chunk content
-        - char_start: start offset within page text
+    Sentence-aware semantic chunking with overlap.
     """
+
     chunks = []
     chunk_id = 0
 
     for page_info in pages:
         page_num = page_info["page"]
         text = page_info["text"]
-        start = 0
 
-        while start < len(text):
-            end = start + CHUNK_SIZE
-            chunk_text = text[start:end].strip()
+        sentences = split_into_sentences(text)
+
+        current_chunk = []
+        current_length = 0
+        char_start = 0
+
+        for sentence in sentences:
+            sentence_length = len(sentence)
+
+            # If adding sentence exceeds chunk size,
+            # finalize current chunk
+            if (
+                current_length + sentence_length > CHUNK_SIZE
+                and current_length >= MIN_CHUNK_SIZE
+            ):
+
+                chunk_text = " ".join(current_chunk).strip()
+
+                if chunk_text:
+                    chunks.append({
+                        "chunk_id": chunk_id,
+                        "page": page_num,
+                        "text": chunk_text,
+                        "char_start": char_start,
+                    })
+
+                    chunk_id += 1
+
+                # Build overlap using last sentences
+                overlap_sentences = []
+                overlap_length = 0
+
+                for s in reversed(current_chunk):
+                    overlap_sentences.insert(0, s)
+                    overlap_length += len(s)
+
+                    if overlap_length >= CHUNK_OVERLAP:
+                        break
+
+                current_chunk = overlap_sentences
+                current_length = overlap_length
+
+                char_start += max(
+                    len(chunk_text) - overlap_length,
+                    0
+                )
+
+            current_chunk.append(sentence)
+            current_length += sentence_length
+
+        # Final chunk
+        if current_chunk:
+            chunk_text = " ".join(current_chunk).strip()
 
             if chunk_text:
                 chunks.append({
                     "chunk_id": chunk_id,
                     "page": page_num,
                     "text": chunk_text,
-                    "char_start": start,
+                    "char_start": char_start,
                 })
-                chunk_id += 1
 
-            if end >= len(text):
-                break
-            start = end - CHUNK_OVERLAP   # slide with overlap
+                chunk_id += 1
 
     return chunks
 

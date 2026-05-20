@@ -24,8 +24,9 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_LLM_MODEL = "openai/gpt-oss-120b:free"
 
 # RAG
-CHUNK_SIZE = 800           # characters per chunk
-CHUNK_OVERLAP = 100        # overlap between chunks
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 150
+MIN_CHUNK_SIZE = 200
 TOP_K_RESULTS = 5          # top chunks to retrieve
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"   # fast, accurate, 384-dim
 
