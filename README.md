@@ -449,9 +449,6 @@ Potential future upgrades:
 
 
 
-# License
-
-MIT License
 
 ---
 
