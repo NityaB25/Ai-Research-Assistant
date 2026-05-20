@@ -9,11 +9,18 @@ import numpy as np
 import faiss
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
-from sentence_transformers import SentenceTransformer
-from config import EMBEDDING_MODEL, TOP_K_RESULTS, VECTOR_DIR
+from sentence_transformers import SentenceTransformer,CrossEncoder
+from config import (
+    EMBEDDING_MODEL,
+    VECTOR_DIR,
+    INITIAL_RETRIEVAL_K,
+    FINAL_RERANK_K,
+    RERANKER_MODEL,
+)
 
 # Load model once at module level (cached after first load)
 _model: SentenceTransformer | None = None
+_reranker: CrossEncoder | None = None
 
 
 def get_model() -> SentenceTransformer:
@@ -21,6 +28,14 @@ def get_model() -> SentenceTransformer:
     if _model is None:
         _model = SentenceTransformer(EMBEDDING_MODEL)
     return _model
+
+def get_reranker() -> CrossEncoder:
+    global _reranker
+
+    if _reranker is None:
+        _reranker = CrossEncoder(RERANKER_MODEL)
+
+    return _reranker
 
 
 # ── Index building ──────────────────────────────────────────────────────────
@@ -78,30 +93,69 @@ def load_index(base_path: str) -> Tuple[faiss.Index, List[Dict]]:
     return index, metadata
 
 
-def retrieve(query: str, base_path: str, top_k: int = TOP_K_RESULTS) -> List[Dict[str, Any]]:
+def retrieve(
+    query: str,
+    base_path: str,
+    top_k: int = FINAL_RERANK_K,
+) -> List[Dict[str, Any]]:
     """
-    Semantic search: embed query → search FAISS → return top_k chunks with scores.
+    Retrieval pipeline:
+    1. FAISS semantic retrieval
+    2. Cross-encoder reranking
+    3. Return best chunks
+    """
 
-    Returns list of dicts:
-        { chunk_id, page, text, char_start, score }
-    """
     model = get_model()
+    reranker = get_reranker()
+
     index, metadata = load_index(base_path)
+
+    # ── Step 1: Dense retrieval via FAISS ─────────────────────
 
     query_vec = model.encode([query], show_progress_bar=False)
     query_vec = np.array(query_vec, dtype=np.float32)
+
     faiss.normalize_L2(query_vec)
 
-    scores, indices = index.search(query_vec, top_k)
+    scores, indices = index.search(query_vec, INITIAL_RETRIEVAL_K)
 
-    results = []
+    candidates = []
+
     for score, idx in zip(scores[0], indices[0]):
-        if idx < 0:          # FAISS returns -1 for not-found slots
+        if idx < 0:
             continue
+
         chunk = metadata[idx].copy()
         chunk["score"] = float(score)
-        results.append(chunk)
 
-    # Sort by score descending (already sorted but be explicit)
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results
+        candidates.append(chunk)
+
+    if not candidates:
+        return []
+
+    # ── Step 2: Cross-encoder reranking ─────────────────────
+
+    pairs = [
+        [query, chunk["text"]]
+        for chunk in candidates
+    ]
+
+    rerank_scores = reranker.predict(pairs)
+
+    for chunk, rerank_score in zip(candidates, rerank_scores):
+        chunk["rerank_score"] = float(rerank_score)
+
+    # Sort by reranker score
+    candidates.sort(
+        key=lambda x: x["rerank_score"],
+        reverse=True,
+    )
+
+    # Keep best reranked chunks
+    final_results = candidates[:top_k]
+
+    print("RERANK SCORES:")
+    for c in final_results:
+        print(c["rerank_score"], c["text"][:80])
+
+    return final_results

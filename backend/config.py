@@ -28,3 +28,8 @@ CHUNK_SIZE = 800           # characters per chunk
 CHUNK_OVERLAP = 100        # overlap between chunks
 TOP_K_RESULTS = 5          # top chunks to retrieve
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"   # fast, accurate, 384-dim
+
+# Reranking
+INITIAL_RETRIEVAL_K = 15
+FINAL_RERANK_K = 5
+RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
