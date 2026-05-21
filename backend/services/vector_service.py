@@ -9,7 +9,13 @@ import numpy as np
 import faiss
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
-from sentence_transformers import SentenceTransformer,CrossEncoder
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sentence_transformers import (
+        SentenceTransformer,
+        CrossEncoder,
+    )
 from config import (
     EMBEDDING_MODEL,
     VECTOR_DIR,
@@ -19,21 +25,32 @@ from config import (
 )
 
 # Load model once at module level (cached after first load)
-_model: SentenceTransformer | None = None
-_reranker: CrossEncoder | None = None
+_model = None
+_reranker = None
 
 
-def get_model() -> SentenceTransformer:
+def get_model():
     global _model
+
     if _model is None:
-        _model = SentenceTransformer(EMBEDDING_MODEL)
+        from sentence_transformers import SentenceTransformer
+
+        _model = SentenceTransformer(
+            EMBEDDING_MODEL
+        )
+
     return _model
 
-def get_reranker() -> CrossEncoder:
+
+def get_reranker():
     global _reranker
 
     if _reranker is None:
-        _reranker = CrossEncoder(RERANKER_MODEL)
+        from sentence_transformers import CrossEncoder
+
+        _reranker = CrossEncoder(
+            RERANKER_MODEL
+        )
 
     return _reranker
 
