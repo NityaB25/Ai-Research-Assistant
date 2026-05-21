@@ -2,10 +2,15 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-
-
 load_dotenv()
-BASE_DIR = Path(__file__).parent.parent
+
+BASE_DIR = Path(__file__).resolve().parent
+
+os.environ["HF_HOME"] = os.getenv(
+    "HF_HOME",
+    str(BASE_DIR / ".cache")
+)
+
 UPLOAD_DIR = BASE_DIR / "uploads"
 VECTOR_DIR = BASE_DIR / "vectors"
 DB_PATH = BASE_DIR / "research_assistant.db"
