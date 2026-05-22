@@ -468,11 +468,7 @@ Solved using:
 * Kubernetes scaling
 * SSE-based streaming architecture
 
----
 
-
-
----
 
 
 
