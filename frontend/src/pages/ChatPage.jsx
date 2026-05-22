@@ -10,6 +10,11 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+
+import "katex/dist/katex.min.css";
+
 pdfjs.GlobalWorkerOptions.workerSrc =
   new URL(
     "pdfjs-dist/build/pdf.worker.min.js",
@@ -244,7 +249,8 @@ const renderContentWithCitations = (text) => {
     return (
       <ReactMarkdown
         key={idx}
-        remarkPlugins={[remarkGfm]}
+         remarkPlugins={[remarkGfm, remarkMath]}
+         rehypePlugins={[rehypeKatex]}
       >
         {part}
       </ReactMarkdown>
