@@ -208,7 +208,7 @@ export default function ChatPage() {
 const token = localStorage.getItem("token");
 
 const pdfUrl = session
-  ? `/api/documents/${session.document_id}/file?token=${token}`
+  ? `${import.meta.env.VITE_API_URL}/documents/${session.document_id}/file?token=${token}`
   : null;
 
 
