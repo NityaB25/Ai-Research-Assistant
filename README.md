@@ -1,356 +1,378 @@
 # AI Research Assistant
 
-A conversational Retrieval-Augmented Generation (RAG) research assistant built with FastAPI, React, FAISS, and modern retrieval techniques.
+A full-stack production-ready Retrieval-Augmented Generation (RAG) platform for interacting with PDFs using semantic search, reranking, streaming LLM responses, persistent vector storage, and conversational memory.
 
-This project allows users to upload PDFs, ask contextual questions about documents, receive grounded answers with citations, and interact with the document in a conversational manner.
+---
+
+# Live Architecture
+
+```text
+Frontend (Vercel)
+        ↓
+Backend API (Render)
+        ↓
+Supabase Postgres + Storage
+        ↓
+Remote Inference Server
+(Local Laptop + Cloudflare Tunnel)
+```
 
 ---
 
 # Features
 
-## Conversational RAG
-- Multi-turn chat over PDFs
-- Context-aware follow-up questions
-- Conversation memory summarization
-- Query rewriting for ambiguous references
+## Authentication
 
-Example:
+* JWT-based authentication
+* Secure signup/login system
+* Protected API routes
+* Persistent user sessions
 
-```text
-User: Explain Gibbs Sampling
-User: What are its limitations?
-```
+## PDF Processing
 
-The system rewrites the second query internally into:
+* Upload PDF documents
+* Page-wise text extraction using PyMuPDF
+* Semantic sentence-aware chunking
+* Overlapping context chunks
 
-```text
-What are the limitations of Gibbs Sampling?
-```
+## Retrieval-Augmented Generation (RAG)
 
-before retrieval.
+* Semantic retrieval using FAISS
+* Embedding generation via SentenceTransformers
+* Cross-encoder reranking
+* Context-aware answer generation
+* Source citations with page references
 
----
+## Conversational AI
 
-## Semantic Retrieval Pipeline
+* Streaming responses
+* Multi-turn conversation memory
+* Query rewriting for follow-up questions
+* Automatic conversation summarization
+* Context-aware retrieval
 
-### Sentence-Aware Chunking
-Instead of naive fixed-character chunking, the system uses sentence-aware overlapping semantic chunks.
+## Vector Search Pipeline
 
-Benefits:
-- Better retrieval quality
-- Cleaner context boundaries
-- Improved reranking accuracy
-- More coherent answers
+* Dense vector embeddings
+* FAISS cosine similarity search
+* Cross-encoder reranking
+* Top-k semantic retrieval
 
----
+## Persistence
 
-### Dense Vector Retrieval (FAISS)
+* PostgreSQL database via Supabase
+* Persistent vector storage
+* Persistent PDF storage
+* Stateless backend deployment
 
-Documents are embedded using:
+## Frontend Features
 
-```text
-all-MiniLM-L6-v2
-```
-
-and indexed using:
-
-```text
-FAISS IndexFlatIP
-```
-
-This enables fast semantic similarity search across document chunks.
-
----
-
-### Cross-Encoder Reranking
-
-Initial semantic retrieval candidates are reranked using:
-
-```text
-cross-encoder/ms-marco-MiniLM-L-6-v2
-```
-
-Pipeline:
-
-```text
-Query
-  ↓
-FAISS retrieves top 15 chunks
-  ↓
-Cross-encoder reranks chunks
-  ↓
-Top 5 most relevant chunks selected
-```
-
-Benefits:
-- Better retrieval precision
-- Reduced noisy chunks
-- Stronger contextual grounding
-- Improved follow-up question handling
-
----
-
-## Streaming Responses
-
-Answers stream token-by-token in real time using:
-
-```text
-FastAPI StreamingResponse
-```
-
-and OpenRouter streaming APIs.
-
-This provides:
-- Faster perceived response time
-- Improved UX
-- ChatGPT-like interaction
-
----
-
-## Source Grounding & Citations
-
-Every answer is grounded in retrieved document chunks.
-
-Features:
-- Page citations
-- Expandable source cards
-- PDF preview pane
-- Clickable source navigation
-- Active page highlighting
-
-Users can inspect the exact retrieved passages used to generate answers.
-
----
-
-## Conversation Memory Summarization
-
-Long conversations are compressed into rolling summaries.
-
-Benefits:
-- Prevents context window overflow
-- Preserves long-term memory
-- Maintains conversational continuity
-- Reduces token usage
-
----
-
-# Architecture
-
-```text
-PDF Upload
-    ↓
-Text Extraction (PyMuPDF)
-    ↓
-Sentence-Aware Chunking
-    ↓
-Embeddings (MiniLM)
-    ↓
-FAISS Vector Index
-    ↓
-
-User Query
-    ↓
-Conversation History + Summary
-    ↓
-Conditional Query Rewriting
-    ↓
-FAISS Retrieval
-    ↓
-Cross-Encoder Reranking
-    ↓
-Context Construction
-    ↓
-LLM Generation (Streaming)
-    ↓
-Grounded Answer + Citations
-```
+* Beautiful modern UI
+* PDF viewer with page navigation
+* Streaming chat interface
+* Source highlighting
+* Citation expansion
+* Responsive layout
 
 ---
 
 # Tech Stack
 
-## Backend
-- FastAPI
-- SQLAlchemy
-- SQLite
-- FAISS
-- SentenceTransformers
-- PyMuPDF
-- OpenRouter API
-- httpx
-
 ## Frontend
-- React
-- Vite
-- TailwindCSS
-- React Router
-- React Markdown
-- React PDF
-- Lucide Icons
+
+* React
+* Vite
+* Tailwind CSS
+* Axios
+* React Markdown
+* React PDF
+* Lucide React
+
+## Backend
+
+* FastAPI
+* SQLAlchemy
+* PostgreSQL
+* JWT Authentication
+* HTTPX
+* FAISS
+
+## AI / ML
+
+* SentenceTransformers
+* CrossEncoder reranking
+* OpenRouter API
+* Llama 3.3 8B
+
+## Infrastructure
+
+* Vercel
+* Render
+* Supabase
+* Cloudflare Tunnel
+
+---
+
+# System Architecture
+
+## 1. PDF Upload Flow
+
+```text
+User Uploads PDF
+        ↓
+FastAPI Backend
+        ↓
+PyMuPDF Text Extraction
+        ↓
+Sentence-aware Chunking
+        ↓
+Remote Embedding Server
+        ↓
+FAISS Index Creation
+        ↓
+Upload vectors to Supabase Storage
+        ↓
+Save metadata to PostgreSQL
+```
+
+---
+
+## 2. Question Answering Flow
+
+```text
+User Question
+        ↓
+Conversation History Analysis
+        ↓
+Query Rewrite (if needed)
+        ↓
+FAISS Semantic Retrieval
+        ↓
+CrossEncoder Reranking
+        ↓
+Context Construction
+        ↓
+OpenRouter LLM Generation
+        ↓
+Streaming Response to Frontend
+```
 
 ---
 
 # Project Structure
 
 ```text
-backend/
-├── routers/
-│   ├── auth_router.py
-│   ├── chat_router.py
-│   └── document_router.py
+ai-research-assistant/
 │
-├── services/
-│   ├── llm_service.py
-│   ├── pdf_service.py
-│   └── vector_service.py
-│
-├── uploads/
-├── vectors/
-├── database.py
-├── config.py
-└── main.py
-
-frontend/
-├── src/
-│   ├── pages/
+├── frontend/
+│   ├── src/
 │   ├── components/
+│   ├── pages/
 │   ├── api/
-│   ├── context/
 │   └── styles/
+│
+├── backend/
+│   ├── routers/
+│   ├── services/
+│   ├── uploads/
+│   ├── vectors/
+│   ├── config.py
+│   ├── database.py
+│   └── main.py
+│
+├── inference_server/
+│   ├── main.py
+│   └── requirements.txt
+│
+└── README.md
 ```
 
 ---
 
-# Retrieval Pipeline Details
+# Retrieval Pipeline
 
-## 1. Query Rewriting
-
-The system determines whether a query depends on prior conversational context.
-
-If needed, it rewrites the query into a standalone semantic query.
-
-Example:
-
-```text
-Original Query:
-"Is it caused by the ergodic property?"
-
-Rewritten Query:
-"Is the Markov property caused by the ergodic property?"
-```
-
-This significantly improves retrieval quality for follow-up questions.
-
----
-
-## 2. Dense Retrieval
-
-Chunks are embedded using:
+## Embedding Model
 
 ```text
 all-MiniLM-L6-v2
 ```
 
-Retrieval uses cosine similarity over normalized vectors.
+* Lightweight
+* Fast inference
+* 384-dimensional embeddings
+* Good semantic retrieval performance
 
----
-
-## 3. Reranking
-
-Retrieved chunks are reranked using a cross-encoder.
-
-Unlike embedding similarity, the reranker jointly processes:
+## Reranker Model
 
 ```text
-(query, chunk)
+cross-encoder/ms-marco-MiniLM-L-6-v2
 ```
 
-allowing deeper semantic relevance scoring.
+Used for:
+
+* semantic reranking
+* relevance refinement
+* improved retrieval quality
 
 ---
 
-# Frontend Features
+# Query Rewriting System
 
-## Interactive PDF Viewer
-- Side-by-side PDF + chat layout
-- Page scrolling
-- Citation-linked navigation
-- Active page highlighting
+The system automatically determines whether a user query depends on previous conversation context.
 
----
+Example:
 
-## Real-Time Streaming UI
-- Token streaming
-- Smooth incremental rendering
-- Live markdown rendering
-- Responsive conversational experience
+```text
+User: Explain Fisher Discriminant Analysis.
+User: What is its objective function?
+```
+
+The second query is rewritten into a standalone semantic query before retrieval.
 
 ---
 
-# Authentication
+# Conversation Memory
 
-The application uses JWT authentication.
+Long conversations are automatically summarized.
 
-Features:
-- Signup/Login
-- Protected routes
-- Persistent sessions
-- Automatic logout on token expiration
+Benefits:
+
+* reduced token usage
+* persistent conversational context
+* scalable chat history
+* better long-session performance
 
 ---
 
-# Installation
+# PDF Chunking Strategy
 
-## Clone Repository
+The system uses:
 
-```bash
-git clone <repo-url>
-cd ai-research-assistant
+* sentence-aware chunking
+* overlap-based context preservation
+* semantic boundaries
+
+Configuration:
+
+```python
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 150
+MIN_CHUNK_SIZE = 200
 ```
 
 ---
 
-# Backend Setup
+# Streaming Architecture
+
+Streaming responses are implemented using:
+
+* FastAPI StreamingResponse
+* incremental token streaming
+* OpenRouter streaming API
+* frontend incremental rendering
+
+---
+
+# Database Schema
+
+## Users
+
+* authentication
+* account management
+
+## Documents
+
+* PDF metadata
+* vector references
+* upload status
+
+## Chat Sessions
+
+* persistent conversations
+* rolling summaries
+
+## Chat Messages
+
+* user/assistant messages
+* citations
+* timestamps
+
+---
+
+# Production Optimizations
+
+## Why Remote Inference?
+
+Render free tier has limited RAM.
+
+Instead of loading transformers on Render:
+
+* embeddings run on local inference server
+* reranker runs remotely
+* backend stays lightweight
+* deployment remains stable
+
+---
+
+# Persistent Storage Design
+
+## Supabase Storage
+
+Used for:
+
+* uploaded PDFs
+* FAISS indices
+* metadata pickle files
+
+## Supabase PostgreSQL
+
+Used for:
+
+* users
+* chat sessions
+* document metadata
+* messages
+
+This makes the backend fully stateless.
+
+---
+
+# Environment Variables
+
+## Backend
+
+```env
+SECRET_KEY=
+OPENROUTER_API_KEY=
+DATABASE_URL=
+SUPABASE_URL=
+SUPABASE_SERVICE_KEY=
+INFERENCE_SERVER_URL=
+```
+
+## Frontend
+
+```env
+VITE_API_URL=
+```
+
+---
+
+# Local Development
+
+## Backend
 
 ```bash
 cd backend
 python -m venv venv
-```
-
-### Windows
-
-```bash
-venv\Scripts\activate
-```
-
-### Linux / Mac
-
-```bash
 source venv/bin/activate
-```
-
-Install dependencies:
-
-```bash
 pip install -r requirements.txt
-```
-
-Create `.env`:
-
-```env
-OPENROUTER_API_KEY=your_api_key
-SECRET_KEY=your_secret_key
-```
-
-Run backend:
-
-```bash
 uvicorn main:app --reload
 ```
 
 ---
 
-# Frontend Setup
+## Frontend
 
 ```bash
 cd frontend
@@ -360,93 +382,97 @@ npm run dev
 
 ---
 
-# API Endpoints
+## Inference Server
 
-## Authentication
-
-```text
-POST /auth/signup
-POST /auth/login
-GET  /auth/me
+```bash
+cd inference_server
+python -m venv venv
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8001
 ```
 
 ---
 
-## Documents
+## Cloudflare Tunnel
 
-```text
-POST   /documents/upload
-GET    /documents/
-GET    /documents/{id}/status
-DELETE /documents/{id}
+```bash
+cloudflared tunnel --url http://localhost:8001
 ```
 
 ---
 
-## Chat
+# Deployment
 
-```text
-POST /chat/sessions
-GET  /chat/sessions
-GET  /chat/sessions/{id}
-POST /chat/sessions/{id}/ask
-POST /chat/sessions/{id}/ask-stream
-```
+## Frontend Deployment
 
----
+* Hosted on Vercel
+* Automatic GitHub deployment
 
-# Example Workflow
+## Backend Deployment
 
-1. Upload a PDF
-2. System extracts and chunks text
-3. Embeddings are generated
-4. FAISS index is built
-5. User asks questions
-6. Retrieval + reranking selects relevant chunks
-7. LLM generates grounded response
-8. Citations link back to document pages
+* Hosted on Render
+* Lightweight FastAPI deployment
+* Uses Supabase persistence
+
+## Database & Storage
+
+* Supabase PostgreSQL
+* Supabase Storage Buckets
 
 ---
 
-# Why This Project Is Different
+# Key Engineering Challenges Solved
 
-Most basic RAG projects only implement:
+## 1. Render RAM Limits
 
-```text
-PDF → Embeddings → LLM
-```
+Solved by:
 
-This project additionally includes:
+* remote inference server
+* lightweight backend architecture
 
-- Conversational retrieval
-- Query rewriting
-- Sentence-aware chunking
-- Cross-encoder reranking
-- Streaming responses
-- Rolling conversation memory
-- Interactive PDF navigation
-- Grounded citations
+## 2. Stateless Deployment
 
-making it significantly closer to production-grade RAG systems.
+Solved using:
+
+* Supabase Storage
+* PostgreSQL persistence
+
+## 3. Conversational Retrieval
+
+Solved using:
+
+* query rewriting
+* rolling summaries
+* contextual retrieval
+
+## 4. Retrieval Quality
+
+Solved using:
+
+* semantic chunking
+* cross-encoder reranking
+* dense vector search
 
 ---
 
 # Future Improvements
 
-Potential future upgrades:
-
-- Hybrid Retrieval (BM25 + Vector Search)
-- Multi-query retrieval
-- Query decomposition
-- Semantic caching
-- Parent-child retrieval
-- OCR support
-- Multi-document chat
-- Highlight exact citation spans
-- Cloud deployment
+* Hybrid retrieval (BM25 + dense retrieval)
+* OCR support for scanned PDFs
+* Multi-document retrieval
+* Citation highlighting inside PDFs
+* Multi-query retrieval
+* Agentic workflows
+* Redis caching
+* Docker deployment
+* Kubernetes scaling
+* SSE-based streaming architecture
 
 ---
 
+
+
+---
 
 
 
@@ -456,4 +482,6 @@ Potential future upgrades:
 
 Nitya Bhavsar
 
-Built as an advanced conversational RAG research assistant project using modern retrieval and LLM engineering techniques.
+---
+
+
