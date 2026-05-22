@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "/api",
+  baseURL: import.meta.env.VITE_API_URL,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -63,7 +63,7 @@ export const chatAPI = {
   const token = localStorage.getItem("token");
 
   const response = await fetch(
-    `/api/chat/sessions/${sessionId}/ask-stream`,
+      `${import.meta.env.VITE_API_URL}/chat/sessions/${sessionId}/ask-stream`,
     {
       method: "POST",
       headers: {
