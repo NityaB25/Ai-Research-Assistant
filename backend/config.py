@@ -18,6 +18,12 @@ DB_PATH = BASE_DIR / "research_assistant.db"
 UPLOAD_DIR.mkdir(exist_ok=True)
 VECTOR_DIR.mkdir(exist_ok=True)
 
+
+INFERENCE_SERVER_URL = os.getenv(
+    "INFERENCE_SERVER_URL",
+    "http://localhost:8001"
+)
+
 # JWT
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production-please")
 ALGORITHM = "HS256"

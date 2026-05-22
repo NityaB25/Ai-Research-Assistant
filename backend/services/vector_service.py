@@ -9,50 +9,19 @@ import numpy as np
 import faiss
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
-from typing import TYPE_CHECKING
+import httpx
 
-if TYPE_CHECKING:
-    from sentence_transformers import (
-        SentenceTransformer,
-        CrossEncoder,
-    )
 from config import (
-    EMBEDDING_MODEL,
+    
     VECTOR_DIR,
     INITIAL_RETRIEVAL_K,
     FINAL_RERANK_K,
-    RERANKER_MODEL,
+    INFERENCE_SERVER_URL
+    
 )
 
-# Load model once at module level (cached after first load)
-_model = None
-_reranker = None
 
 
-def get_model():
-    global _model
-
-    if _model is None:
-        from sentence_transformers import SentenceTransformer
-
-        _model = SentenceTransformer(
-            EMBEDDING_MODEL
-        )
-
-    return _model
-
-
-def get_reranker():
-    global _reranker
-
-    if _reranker is None:
-        from sentence_transformers import CrossEncoder
-
-        _reranker = CrossEncoder(
-            RERANKER_MODEL
-        )
-
-    return _reranker
 
 
 # ── Index building ──────────────────────────────────────────────────────────
@@ -67,11 +36,17 @@ def build_index(document_id: int, chunks: List[Dict[str, Any]]) -> str:
 
     Returns the base path string (without extension).
     """
-    model = get_model()
     texts = [c["text"] for c in chunks]
 
-    # Generate embeddings  (batch for speed)
-    embeddings = model.encode(texts, batch_size=32, show_progress_bar=False)
+    response = httpx.post(
+    f"{INFERENCE_SERVER_URL}/embed",
+    json={"texts": texts},
+    timeout=120,
+)
+
+    response.raise_for_status()
+
+    embeddings = response.json()["embeddings"] 
     embeddings = np.array(embeddings, dtype=np.float32)
 
     # Normalise so inner-product == cosine similarity
@@ -122,14 +97,21 @@ def retrieve(
     3. Return best chunks
     """
 
-    model = get_model()
-    reranker = get_reranker()
+    
 
     index, metadata = load_index(base_path)
 
     # ── Step 1: Dense retrieval via FAISS ─────────────────────
 
-    query_vec = model.encode([query], show_progress_bar=False)
+    response = httpx.post(
+    f"{INFERENCE_SERVER_URL}/embed",
+    json={"texts": [query]},
+    timeout=60,
+)
+
+    response.raise_for_status()
+
+    query_vec = response.json()["embeddings"]   
     query_vec = np.array(query_vec, dtype=np.float32)
 
     faiss.normalize_L2(query_vec)
@@ -152,12 +134,22 @@ def retrieve(
 
     # ── Step 2: Cross-encoder reranking ─────────────────────
 
-    pairs = [
-        [query, chunk["text"]]
-        for chunk in candidates
-    ]
 
-    rerank_scores = reranker.predict(pairs)
+    response = httpx.post(
+    f"{INFERENCE_SERVER_URL}/rerank",
+    json={
+        "query": query,
+        "documents": [
+            chunk["text"]
+            for chunk in candidates
+        ],
+    },
+    timeout=60,
+)
+
+    response.raise_for_status()
+
+    rerank_scores = response.json()["scores"]
 
     for chunk, rerank_score in zip(candidates, rerank_scores):
         chunk["rerank_score"] = float(rerank_score)
