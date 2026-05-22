@@ -45,3 +45,7 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"   # fast, accurate, 384-dim
 INITIAL_RETRIEVAL_K = 15
 FINAL_RERANK_K = 5
 RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+#supbase
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
