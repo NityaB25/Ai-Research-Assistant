@@ -18,6 +18,10 @@ Rules:
 4. Be concise, accurate, and helpful.
 5. Use markdown formatting for clarity (bullet points, bold, code blocks if needed).
 6. When summarizing, cover the key points thoroughly.
+7. For mathematical notation, ALWAYS use proper LaTeX formatting:
+- Use $...$ for inline equations
+- Use $$...$$ for block equations
+- Never write raw latex without math delimiters
 
 """
 
