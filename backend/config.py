@@ -10,10 +10,10 @@ os.environ["HF_HOME"] = os.getenv(
     "HF_HOME",
     str(BASE_DIR / ".cache")
 )
-
+DATABASE_URL = os.getenv("DATABASE_URL")
 UPLOAD_DIR = BASE_DIR / "uploads"
 VECTOR_DIR = BASE_DIR / "vectors"
-DB_PATH = BASE_DIR / "research_assistant.db"
+
 
 UPLOAD_DIR.mkdir(exist_ok=True)
 VECTOR_DIR.mkdir(exist_ok=True)
