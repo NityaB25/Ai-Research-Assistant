@@ -249,8 +249,8 @@ const renderContentWithCitations = (text) => {
     return (
       <ReactMarkdown
         key={idx}
-         remarkPlugins={[remarkGfm, remarkMath]}
-         rehypePlugins={[rehypeKatex]}
+         remarkPlugins={[remarkGfm]}
+        
       >
         {part}
       </ReactMarkdown>
